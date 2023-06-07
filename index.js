@@ -10,6 +10,25 @@ const cors = require('cors')
 app.use(cors());
 app.use(express.json());
 
+const verifyJWT = (req, res, next) => {
+  const authorization = req.headers.authorization;
+  if (!authorization) {
+    return res
+      .status(401)
+      .send({ error: true, message: "unauthorized access" });
+  }
+  const token = authorization.split(' ')[1];
+  jwt.verify(token, process.env.JWT_ACCESS_TOKEN, (error, user) => {
+    if (error) {
+        return res
+          .status(401)
+          .send({ error: true, message: "unauthorized access" });
+    }
+    req.user = user;
+    next();
+  })
+}
+
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const uri =
   `mongodb+srv://mdSagor:WpCXE6hxYmlQlcZz@cluster0.gmwr7s9.mongodb.net/?retryWrites=true&w=majority`;
@@ -26,17 +45,35 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-     await client.connect();
+    await client.connect();
 
-     app.post('/jwt', (req, res) => {
-        const userInfo = req.body;
-        const token = jwt.sign(userInfo, process.env.JWT_ACCESS_TOKEN, {
-           expiresIn:'1hr'
-        });
-        res.send({token})
-     })
+    const instructorsCollection = client.db("Languages").collection("Instructors");
+    const classesCollection = client.db("Languages").collection("Classes");
+    const selectedClassesCollection = client.db("Languages").collection("selectedClasses");
 
-
+    app.post("/jwt", (req, res) => {
+      const userInfo = req.body;
+      const token = jwt.sign(userInfo, process.env.JWT_ACCESS_TOKEN, {
+        expiresIn: "1hr",
+      });
+      res.send({ token });
+    });
+    // instructors & classes related apis
+    app.get("/instructors", async (req, res) => {
+      const result = await instructorsCollection.find().toArray();
+      res.send(result);
+    });
+    //   classes relate apis
+    app.get("/classes", async (req, res) => {
+      const result = await classesCollection.find().toArray();
+      res.send(result);
+    });
+    app.post('/selectedClass', async (req, res) => {
+      const mySelectedClass = req.body;
+      // console.log('form selectedClass',mySelectedClass);
+      const result = await selectedClassesCollection.insertOne(mySelectedClass);
+      res.send(result);
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
