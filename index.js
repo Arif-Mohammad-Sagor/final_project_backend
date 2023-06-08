@@ -29,7 +29,7 @@ const verifyJWT = (req, res, next) => {
   })
 }
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri =
   `mongodb+srv://mdSagor:WpCXE6hxYmlQlcZz@cluster0.gmwr7s9.mongodb.net/?retryWrites=true&w=majority`;
 
@@ -58,14 +58,20 @@ async function run() {
       });
       res.send({ token });
     });
-    // instructors & classes related apis
+    // instructors  related apis
     app.get("/instructors", async (req, res) => {
       const result = await instructorsCollection.find().toArray();
       res.send(result);
     });
-    //   classes relate apis
+    // classes relate apis
     app.get("/classes", async (req, res) => {
       const result = await classesCollection.find().toArray();
+      res.send(result);
+    });
+    app.get("/selectedClasses",verifyJWT, async (req, res) => {
+      const email = req.query.email;
+      const query = { Email:email }
+      const result = await selectedClassesCollection.find(query).toArray();
       res.send(result);
     });
     app.post('/selectedClass', async (req, res) => {
@@ -74,7 +80,12 @@ async function run() {
       const result = await selectedClassesCollection.insertOne(mySelectedClass);
       res.send(result);
     })
-
+    app.delete("/selectedClasses/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await selectedClassesCollection.deleteOne(query);
+      res.send(result);
+   });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
