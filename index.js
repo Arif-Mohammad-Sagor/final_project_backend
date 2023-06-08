@@ -77,9 +77,15 @@ async function run() {
       res.send(result);
     });
     app.post('/selectedClass', async (req, res) => {
-      const mySelectedClass = req.body;
-      // console.log('form selectedClass',mySelectedClass);
-      const result = await selectedClassesCollection.insertOne(mySelectedClass);
+      const course = req.body;
+      // console.log(courseName);
+      const query = {Name:course.Name}
+      const Existing = await selectedClassesCollection.findOne(query)
+      console.log(Existing);
+      if (Existing) {
+       return res.send({message:"Already you have added to cart"})
+      }
+      const result = await selectedClassesCollection.insertOne(course);
       res.send(result);
     })
     app.delete("/selectedClasses/:id", async (req, res) => {
@@ -117,22 +123,50 @@ async function run() {
       });
     });
 
+   // user history api here
+
+    app.get('/myEnrolledClasses', async (req, res) => {
+
+       const pipeline = [
+         {
+           $lookup: {
+             from: "Classes",
+             localField: "haveInAllClassItemsId",
+             foreignField: "_id",
+             as: "matchingClasses",
+           },
+         },
+       ];
+
+
+      // Perform the aggregation using async/await
+    const result = await paymentsCollection.aggregate(pipeline).toArray();
+      console.log(result);
+    // Extract the matching classes from the result
+      const matchingClasses = result[0].matchingClasses;
+      console.log(matchingClasses);
+
+    // Return the matching classes
+    res.json({ classes: matchingClasses });
+  }
+    )
     // user payment apis here
     app.post('/makepayment', async (req, res) => {
       const payment = req.body;
+
       // here converting into new object id ;
           payment.haveInAllClassItemsId = payment.haveInAllClassItemsId.map(
             (item) => new ObjectId(item)
           );
           const result = await paymentsCollection.insertOne(payment);
-    // here converting into new object Id selected id
+    // here converting into new object Id selected id for delete option.
           const query = {
             _id: {
               $in: payment.selectedClassItemsId.map((id) => new ObjectId(id)),
             },
           };
       const deletedSelectedClasses = await selectedClassesCollection.deleteMany(query);
-          
+
           res.status(200).send({
             result,
             deletedSelectedClasses,
