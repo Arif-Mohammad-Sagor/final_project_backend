@@ -72,6 +72,13 @@ async function run() {
       const result = await classesCollection.find().toArray();
       res.send(result);
     });
+    app.post('/newClasses', async (req, res) => {
+      const newItem = req.body;
+
+      const result = await classesCollection.insertOne(newItem)
+      // console.log(newItem, result);
+      res.send(result);
+    })
     // selected classes apis here
     app.get("/selectedClasses", verifyJWT, async (req, res) => {
       const email = req.query.email;
@@ -84,7 +91,7 @@ async function run() {
       // console.log(courseName);
       const query = { Name: course.Name };
       const Existing = await selectedClassesCollection.findOne(query);
-      console.log(Existing);
+      // console.log(Existing);
       if (Existing) {
         return res.send({ message: "Already you have added to cart" });
       }
@@ -141,17 +148,18 @@ async function run() {
       ];
 
       const result = await paymentsCollection.aggregate(pipeline).toArray();
-      console.log(result);
+      // console.log(result);
       const matchingClasses = result[0].matchingClasses;
-      // console.log(matchingClasses);
 
       // Return the matching classes
+      console.log(matchingClasses);
       res.send({ classes: matchingClasses });
     });
+
     // user payment apis here
     app.post("/makepayment", async (req, res) => {
       const payment = req.body;
-
+      paymentsCollection;
       // here converting into new object id ;
       payment.haveInAllClassItemsId = payment.haveInAllClassItemsId.map(
         (item) => new ObjectId(item)
@@ -169,13 +177,11 @@ async function run() {
       );
 
       try {
-        const paymentData = req.body; // Assuming payment data is sent in the request body
-
         // Aggregation pipeline to update available seats for matching classes
         const pipeline = [
           {
             $match: {
-              _id: { $in: paymentData.haveInAllClassItemsId },
+              _id: { $in: payment.haveInAllClassItemsId },
             },
           },
           {
@@ -191,7 +197,7 @@ async function run() {
           },
           {
             $merge: {
-              into: "Classes", // Specify the name of the "Classes" collection
+              into: "Classes",
               on: "_id",
               whenMatched: "replace",
             },
@@ -212,6 +218,29 @@ async function run() {
         res.status(500).json({ error: "Internal server error" });
       }
     });
+
+    app.get("/mypaymentHistory", async (req, res) => {
+      const email = req.query.email;
+      // console.log(email);
+      const query = { email: email };
+      const paymentHistory = await paymentsCollection
+        .find(query)
+        .project({
+          email: 1,
+          transectionId: 1,
+          quantity: 1,
+          selectedClassItemsNames: 1,
+          price: 1,
+          date: 1,
+        })
+        .sort({ date: -1 })
+        .toArray();
+
+      // console.log("paymenthistory", paymentHistory)
+      // res.send({paymentHistory})
+      res.send(paymentHistory);
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
