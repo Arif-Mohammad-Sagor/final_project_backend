@@ -46,6 +46,7 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
+    const usersCollection = client.db("Languages").collection("Users");
     const instructorsCollection = client
       .db("Languages")
       .collection("Instructors");
@@ -62,6 +63,60 @@ async function run() {
       });
       res.send({ token });
     });
+
+    /// users apis here
+    app.get("/allUsers", async (req, res) => {
+      const result = await usersCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.post("/addUsers", async (req, res) => {
+      const newUser = req.body;
+      newUser.role = "student";
+      const query = { email: req.body.email };
+      const existing = await usersCollection.findOne(query);
+      if (existing) {
+        return res.send({ message: "aleady user exist" });
+      }
+      const result = await usersCollection.insertOne(newUser);
+      res.send(result);
+    });
+
+// Admin Role Action related apis ///////////////////
+    // updatin here an user to instructor
+
+    app.patch("/allUsers/admin/:id", async (req, res) => {
+      const id = req.params.id;
+      const queryId = { _id: new ObjectId(id) };
+      const newRole = "admin";
+      try {
+        const updatedUser = await usersCollection.updateOne(queryId, {
+          $set: { role: newRole },
+        });
+
+        return res.json(updatedUser);
+      } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Internal server error" });
+      }
+    });
+// updatin here an user to instructor  
+    app.patch("/allUsers/instructor/:id", async (req, res) => {
+      const id = req.params.id;
+      const queryId = { _id: new ObjectId(id) };
+      const newRole = "instructor";
+      try {
+        const updatedUser = await usersCollection.updateOne(queryId, {
+          $set: { role: newRole },
+        });
+
+        return res.json(updatedUser);
+      } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Internal server error" });
+      }
+    });
+
     // instructors  related apis
     app.get("/instructors", async (req, res) => {
       const result = await instructorsCollection.find().toArray();
@@ -80,12 +135,11 @@ async function run() {
     });
     app.post("/newClasses", async (req, res) => {
       const newItem = req.body;
-      // console.log(newItem);
       const result = await classesCollection.insertOne(newItem);
-      // console.log(newItem, result);
       res.send(result);
     });
-/// admin actin for approve or denail
+
+    /// admin actin for approve or denail
     app.patch("/updateMyClass/:id", async (req, res) => {
       const id = req.params.id;
       const queryId = { _id: new ObjectId(id) };
@@ -108,50 +162,48 @@ async function run() {
     });
 
     // update dinail
-     app.patch("/updateMyClassDenial/:id", async (req, res) => {
-       const id = req.params.id;
-       const queryId = { _id: new ObjectId(id) };
-       const newStatus = "denied";
+    app.patch("/updateMyClassDenial/:id", async (req, res) => {
+      const id = req.params.id;
+      const queryId = { _id: new ObjectId(id) };
+      const newStatus = "denied";
 
-       try {
-         const updatedClass = await classesCollection.updateOne(queryId, {
-           $set: { status: newStatus },
-         });
+      try {
+        const updatedClass = await classesCollection.updateOne(queryId, {
+          $set: { status: newStatus },
+        });
 
-         if (updatedClass.modifiedCount === 0) {
-           return res.status(404).json({ error: "Class not found" });
-         }
+        if (updatedClass.modifiedCount === 0) {
+          return res.status(404).json({ error: "Class not found" });
+        }
 
-         return res.json(updatedClass);
-       } catch (error) {
-         console.error(error);
-         return res.status(500).json({ error: "Internal server error" });
-       }
-     });
-/// admin feedback section here
+        return res.json(updatedClass);
+      } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Internal server error" });
+      }
+    });
+    /// admin feedback section here
     app.patch("/updateMyInstructorClass/:id", async (req, res) => {
-    const id = req.params.id;
-    const feedbackContent = req.body;
+      const id = req.params.id;
+      const feedbackContent = req.body;
       const queryId = { _id: new ObjectId(id) };
       // console.log(feedbackContent);
 
-    try {
-      const updatedClass = await classesCollection.updateOne(queryId, {
-        $set: { feedback: feedbackContent },
-      });
+      try {
+        const updatedClass = await classesCollection.updateOne(queryId, {
+          $set: { feedback: feedbackContent },
+        });
 
-      if (updatedClass.modifiedCount === 0) {
-        return res.status(404).json({ error: "Class not found" });
+        if (updatedClass.modifiedCount === 0) {
+          return res.status(404).json({ error: "Class not found" });
+        }
+
+        return res.json(updatedClass);
+      } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Internal server error" });
       }
-
-      return res.json(updatedClass);
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: "Internal server error" });
-    }
-
-});
-
+    });
 
     // selected classes apis here
     app.get("/selectedClasses", verifyJWT, async (req, res) => {
@@ -250,51 +302,49 @@ async function run() {
         query
       );
 
-   try {
-  // Aggregation pipeline to update studentQty and AvailableSeats for matching classes
-  const pipeline = [
-    {
-      $match: {
-        _id: { $in: payment.haveInAllClassItemsId },
-      },
-    },
-    {
-      $project: {
-        _id: 1,
-        Name: 1,
-        Price: 1,
-        Image: 1,
-        studentQty: { $add: ["$studentQty", 1] },
-        InstructorName: 1,
-        AvailableSeats: { $subtract: ["$AvailableSeats", 1] },
-      },
-    },
-    {
-      $merge: {
-        into: "Classes",
-        on: "_id",
-        whenMatched: "replace",
-      },
-    },
-  ];
+      try {
+        // Aggregation pipeline to update studentQty and AvailableSeats for matching classes
+        const pipeline = [
+          {
+            $match: {
+              _id: { $in: payment.haveInAllClassItemsId },
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+              Name: 1,
+              Price: 1,
+              Image: 1,
+              studentQty: { $add: ["$studentQty", 1] },
+              InstructorName: 1,
+              AvailableSeats: { $subtract: ["$AvailableSeats", 1] },
+            },
+          },
+          {
+            $merge: {
+              into: "Classes",
+              on: "_id",
+              whenMatched: "replace",
+            },
+          },
+        ];
 
-  // Perform the aggregation to update studentQty and AvailableSeats
-  await classesCollection.aggregate(pipeline).toArray();
+        // Perform the aggregation to update studentQty and AvailableSeats
+        await classesCollection.aggregate(pipeline).toArray();
 
-  // Respond with success message
-  res.status(200).send({
-    result,
-    deletedSelectedClasses,
-    message: "Payment successful. Class quantity updated.",
-  });
-} catch (err) {
-  console.error(err);
-  res.status(500).json({ error: "Internal server error" });
-}
+        // Respond with success message
+        res.status(200).send({
+          result,
+          deletedSelectedClasses,
+          message: "Payment successful. Class quantity updated.",
+        });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Internal server error" });
+      }
 
       // second pipeline
-
-
     });
 
     app.get("/mypaymentHistory", async (req, res) => {
