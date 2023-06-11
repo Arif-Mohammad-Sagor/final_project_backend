@@ -82,7 +82,7 @@ async function run() {
       res.send(result);
     });
 
-// Admin Role Action related apis ///////////////////
+    // Admin Role Action related apis ///////////////////
     // updatin here an user to instructor
 
     app.patch("/allUsers/admin/:id", async (req, res) => {
@@ -100,7 +100,7 @@ async function run() {
         return res.status(500).json({ error: "Internal server error" });
       }
     });
-// updatin here an user to instructor  
+    // updating here an user to instructor
     app.patch("/allUsers/instructor/:id", async (req, res) => {
       const id = req.params.id;
       const queryId = { _id: new ObjectId(id) };
@@ -115,6 +115,15 @@ async function run() {
         console.error(error);
         return res.status(500).json({ error: "Internal server error" });
       }
+    });
+    app.get("/myAllUsers/admin", async (req, res) => {
+      const email = req.query.email;
+      // console.log(email);
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      const role = user?.role;
+      const result = { role };
+      res.send(result);
     });
 
     // instructors  related apis
@@ -205,6 +214,24 @@ async function run() {
       }
     });
 
+    // top classes from here
+
+    app.get("/topClasses", async (req, res) => {
+      const result = await classesCollection
+        .find()
+        .sort({ studentQty: -1 }).limit(6)
+        .toArray();
+      res.send(result);
+    });
+    // top instructor
+ app.get("/topInstructor", async (req, res) => {
+   const result = await instructorsCollection
+     .find()
+     .sort({ classesQnty: -1 })
+     .limit(6)
+     .toArray();
+   res.send(result);
+ });
     // selected classes apis here
     app.get("/selectedClasses", verifyJWT, async (req, res) => {
       const email = req.query.email;
