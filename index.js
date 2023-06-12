@@ -31,7 +31,7 @@ const verifyJWT = (req, res, next) => {
   });
 };
 
-const uri = `mongodb://mdSagor:WpCXE6hxYmlQlcZz@ac-voaoh7g-shard-00-00.gmwr7s9.mongodb.net:27017,ac-voaoh7g-shard-00-01.gmwr7s9.mongodb.net:27017,ac-voaoh7g-shard-00-02.gmwr7s9.mongodb.net:27017/?ssl=true&replicaSet=atlas-xr8fvm-shard-0&authSource=admin&retryWrites=true&w=majority`;
+const uri = `mongodb://${process.env.DB_USER}:${process.env.BD_PASSWORD}@ac-voaoh7g-shard-00-00.gmwr7s9.mongodb.net:27017,ac-voaoh7g-shard-00-01.gmwr7s9.mongodb.net:27017,ac-voaoh7g-shard-00-02.gmwr7s9.mongodb.net:27017/?ssl=true&replicaSet=atlas-xr8fvm-shard-0&authSource=admin&retryWrites=true&w=majority`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
@@ -55,22 +55,36 @@ async function run() {
       .db("Languages")
       .collection("selectedClasses");
     const paymentsCollection = client.db("Languages").collection("payments");
+    // verifying admin here ////////////////////
+
+const verifyAdmin = async (req, res, next) => {
+  const email = req.user.email;
+  // console.log(email);
+  const query = { email: email };
+  const user = await usersCollection.findOne(query);
+  if (user?.role !== "admin") {
+    return res
+      .status(403)
+      .send({ error: true, message: "unauthorized access from client" });
+  }
+  next();
+};
 
     app.post("/jwt", (req, res) => {
       const userInfo = req.body;
       const token = jwt.sign(userInfo, process.env.JWT_ACCESS_TOKEN, {
-        expiresIn: "1hr",
+        expiresIn: "3d",
       });
       res.send({ token });
     });
 
     /// users apis here
-    app.get("/allUsers", async (req, res) => {
+    app.get("/allUsers", verifyJWT, verifyAdmin, async (req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     });
 
-    app.post("/addUsers", async (req, res) => {
+    app.post("/addUsers" ,async (req, res) => {
       const newUser = req.body;
       newUser.role = "student";
       const query = { email: req.body.email };
@@ -85,7 +99,7 @@ async function run() {
     // Admin Role Action related apis ///////////////////
     // updatin here an user to instructor
 
-    app.patch("/allUsers/admin/:id", async (req, res) => {
+    app.patch("/allUsers/admin/:id", verifyJWT,verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const queryId = { _id: new ObjectId(id) };
       const newRole = "admin";
@@ -101,7 +115,7 @@ async function run() {
       }
     });
     // updating here an user to instructor
-    app.patch("/allUsers/instructor/:id", async (req, res) => {
+    app.patch("/allUsers/instructor/:id",verifyJWT,verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const queryId = { _id: new ObjectId(id) };
       const newRole = "instructor";
@@ -116,7 +130,7 @@ async function run() {
         return res.status(500).json({ error: "Internal server error" });
       }
     });
-    app.get("/myAllUsers/admin", async (req, res) => {
+    app.get("/myAllUsers/admin",verifyJWT, async (req, res) => {
       const email = req.query.email;
       // console.log(email);
       const query = { email: email };
@@ -128,28 +142,32 @@ async function run() {
 
     // instructors  related apis
     app.get("/instructors", async (req, res) => {
-      const result = await instructorsCollection.find().toArray();
+      const result = await usersCollection
+        .find({ role: "instructor" })
+        .toArray();
       res.send(result);
     });
     // classes relate apis
     app.get("/classes", async (req, res) => {
-      const result = await classesCollection.find().toArray();
+    const result = await classesCollection
+      .find()
+      .toArray();
       res.send(result);
     });
 
     // get all classes added by instrcutor
-    app.get("/myAllClasses", async (req, res) => {
+    app.get("/myAllClasses",verifyJWT, async (req, res) => {
       const result = await classesCollection.find(req.query).toArray();
       res.send(result);
     });
-    app.post("/newClasses", async (req, res) => {
+    app.post("/newClasses",verifyJWT, async (req, res) => {
       const newItem = req.body;
       const result = await classesCollection.insertOne(newItem);
       res.send(result);
     });
 
     /// admin actin for approve or denail
-    app.patch("/updateMyClass/:id", async (req, res) => {
+    app.patch("/updateMyClass/:id",verifyJWT,verifyJWT, async (req, res) => {
       const id = req.params.id;
       const queryId = { _id: new ObjectId(id) };
       const newStatus = "approved";
@@ -171,28 +189,33 @@ async function run() {
     });
 
     // update dinail
-    app.patch("/updateMyClassDenial/:id", async (req, res) => {
-      const id = req.params.id;
-      const queryId = { _id: new ObjectId(id) };
-      const newStatus = "denied";
+    app.patch(
+      "/updateMyClassDenial/:id",
+      verifyJWT,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const queryId = { _id: new ObjectId(id) };
+        const newStatus = "denied";
 
-      try {
-        const updatedClass = await classesCollection.updateOne(queryId, {
-          $set: { status: newStatus },
-        });
+        try {
+          const updatedClass = await classesCollection.updateOne(queryId, {
+            $set: { status: newStatus },
+          });
 
-        if (updatedClass.modifiedCount === 0) {
-          return res.status(404).json({ error: "Class not found" });
+          if (updatedClass.modifiedCount === 0) {
+            return res.status(404).json({ error: "Class not found" });
+          }
+          // console.log(updatedClass);
+          return res.json(updatedClass);
+        } catch (error) {
+          console.error(error);
+          return res.status(500).json({ error: "Internal server error" });
         }
-
-        return res.json(updatedClass);
-      } catch (error) {
-        console.error(error);
-        return res.status(500).json({ error: "Internal server error" });
       }
-    });
+    );
     /// admin feedback section here
-    app.patch("/updateMyInstructorClass/:id", async (req, res) => {
+    app.patch("/updateMyInstructorClass/:id",verifyJWT,verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const feedbackContent = req.body;
       const queryId = { _id: new ObjectId(id) };
@@ -239,7 +262,7 @@ async function run() {
       const result = await selectedClassesCollection.find(query).toArray();
       res.send(result);
     });
-    app.post("/selectedClass", async (req, res) => {
+    app.post("/selectedClass",verifyJWT, async (req, res) => {
       const course = req.body;
       // console.log(courseName);
       const query = { Name: course.Name };
@@ -251,7 +274,7 @@ async function run() {
       const result = await selectedClassesCollection.insertOne(course);
       res.send(result);
     });
-    app.delete("/selectedClasses/:id", async (req, res) => {
+    app.delete("/selectedClasses/:id",verifyJWT, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await selectedClassesCollection.deleteOne(query);
@@ -259,7 +282,7 @@ async function run() {
     });
     // payment related apis here //
     // Todo :have to verify user here
-    app.post("/create-payment-intent", async (req, res) => {
+    app.post("/create-payment-intent",verifyJWT, async (req, res) => {
       const { price } = req.body;
       const amount = price;
 
@@ -286,31 +309,50 @@ async function run() {
       });
     });
 
-    // user history api here
+    // use history api here
 
-    app.get("/myEnrolledClasses", async (req, res) => {
-      const pipeline = [
-        {
-          $lookup: {
-            from: "Classes",
-            localField: "haveInAllClassItemsId",
-            foreignField: "_id",
-            as: "matchingClasses",
-          },
+ app.get("/myEnrolledClasses", verifyJWT, async (req, res) => {
+
+    const email = req.query.email;
+
+    const pipeline = [
+      {
+        $match: {
+          email: email,
         },
-      ];
+      },
+      {
+        $lookup: {
+          from: "Classes",
+          localField: "haveInAllClassItemsId",
+          foreignField: "_id",
+          as: "matchingClasses",
+        },
+      },
+      {
+        $unwind: "$matchingClasses",
+      },
+      {
+        $project: {
+          _id: "$matchingClasses._id",
+          Image: "$matchingClasses.Image",
+          Name: "$matchingClasses.Name",
+          InstructorName: "$matchingClasses.InstructorName",
+          Price: "$matchingClasses.Price",
+          studentQty: "$matchingClasses.studentQty",
+          AvailableSeats: "$matchingClasses.AvailableSeats",
+          status: "$matchingClasses.status",
+        },
+      },
+    ];
 
-      const result = await paymentsCollection.aggregate(pipeline).toArray();
-      // console.log(result);
-      const matchingClasses = result[0].matchingClasses;
+    const result = await paymentsCollection.aggregate(pipeline).toArray();
 
-      // Return the matching classes
-      // console.log(matchingClasses);
-      res.send({ classes: matchingClasses });
+    res.send({ classes: result });
     });
 
     // user payment apis here
-    app.post("/makepayment", async (req, res) => {
+    app.post("/makepayment",verifyJWT, async (req, res) => {
       const payment = req.body;
       paymentsCollection;
       // here converting into new object id ;
@@ -318,8 +360,7 @@ async function run() {
         (item) => new ObjectId(item)
       );
       const result = await paymentsCollection.insertOne(payment);
-      // console.log(result);
-      // here converting into new object Id selected id for delete option.
+      
       const query = {
         _id: {
           $in: payment.selectedClassItemsId.map((id) => new ObjectId(id)),
@@ -330,7 +371,7 @@ async function run() {
       );
 
       try {
-        // Aggregation pipeline to update studentQty and AvailableSeats for matching classes
+
         const pipeline = [
           {
             $match: {
@@ -343,6 +384,7 @@ async function run() {
               Name: 1,
               Price: 1,
               Image: 1,
+              status:1,
               studentQty: { $add: ["$studentQty", 1] },
               InstructorName: 1,
               AvailableSeats: { $subtract: ["$AvailableSeats", 1] },
@@ -374,7 +416,7 @@ async function run() {
       // second pipeline
     });
 
-    app.get("/mypaymentHistory", async (req, res) => {
+    app.get("/mypaymentHistory",verifyJWT, async (req, res) => {
       const email = req.query.email;
       // console.log(email);
       const query = { email: email };
@@ -391,8 +433,6 @@ async function run() {
         .sort({ date: -1 })
         .toArray();
 
-      // console.log("paymenthistory", paymentHistory)
-      // res.send({paymentHistory})
       res.send(paymentHistory);
     });
 
